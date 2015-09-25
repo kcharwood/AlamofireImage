@@ -117,9 +117,9 @@ extension UIImageView {
         }
     }
 
-    var af_activeRequest: RequestContainer? {
+    var af_activeRequest: RequestReceipt? {
         get {
-            return objc_getAssociatedObject(self, &AssociatedKeys.ActiveRequestKey) as? RequestContainer
+            return objc_getAssociatedObject(self, &AssociatedKeys.ActiveRequestKey) as? RequestReceipt
         }
         set(request) {
             objc_setAssociatedObject(self, &AssociatedKeys.ActiveRequestKey, request, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -354,7 +354,7 @@ extension UIImageView {
     public func af_cancelImageRequest() {
         let imageDownloader = UIImageView.af_sharedImageDownloader
         if let activeRequest = self.af_activeRequest {
-            imageDownloader.cancelRequestForRequestContainer(activeRequest)
+            imageDownloader.cancelRequestForRequestReceipt(activeRequest)
         }
     }
 

@@ -29,8 +29,10 @@ import UIKit
 import Cocoa
 #endif
 
-
-public class RequestContainer {
+/// The `RequestReceipt` represents the object returned by the downloader, and is used as reference
+/// object to track which callers need the response vended back to them. The `request` should not be 
+/// directly modified by the receiver.
+public class RequestReceipt {
     let request: Request
     let uuid: NSUUID
     required public init(request: Request, uuid: NSUUID) {
@@ -212,10 +214,10 @@ public class ImageDownloader {
         - parameter URLRequest: The URL request.
         - parameter completion: The closure called when the download request is complete.
 
-        - returns: The created download request if available. `nil` if the image is stored in the image cache and the
+        - returns: The a receipt of the download request if available. `nil` if the image is stored in the image cache and the
                   URL request cache policy allows the cache to be used.
     */
-    public func downloadImage(URLRequest URLRequest: URLRequestConvertible, completion: CompletionHandler?) -> RequestContainer? {
+    public func downloadImage(URLRequest URLRequest: URLRequestConvertible, completion: CompletionHandler?) -> RequestReceipt? {
         return downloadImage(URLRequest: URLRequest, filter: nil, completion: completion)
     }
 
@@ -228,22 +230,22 @@ public class ImageDownloader {
         to the request with the same identifiers are only executed once. The resulting image is then passed into each
         completion handler paired with the filter.
     
-        Note that you should not attempt to modify any of the request properties from the returned request container directly,
+        Note that you should not attempt to modify any of the request properties from the returned request receipt directly,
         as other callers may also be relying on that request to complete. If you no longer need the request, call 
-        `cancelRequestForRequestContainer` with the request container returned here.
+        `cancelRequestForRequestReceipt` with the request receipt.
 
         - parameter URLRequest: The URL request.
         - parameter filter      The image filter to apply to the image after the download is complete.
         - parameter completion: The closure called when the download request is complete.
 
-        - returns: The created request container containing the download request if available. `nil` if the image is
+        - returns: The request receipt containing the download request if available. `nil` if the image is
                    stored in the image cache and the URL request cache policy allows the cache to be used.
     */
     public func downloadImage(
         URLRequest URLRequest: URLRequestConvertible,
         filter: ImageFilter?,
         completion: CompletionHandler?)
-        -> RequestContainer?
+        -> RequestReceipt?
     {
         var request: Request!
         let callerUUID = NSUUID()
@@ -344,31 +346,31 @@ public class ImageDownloader {
             }
         }
 
-        return RequestContainer(request: request, uuid: callerUUID)
+        return RequestReceipt(request: request, uuid: callerUUID)
     }
 
     /**
-    Removes the request container from the response handlers for the request, and cancels the request if necessary.
+    Removes the response handlers for the request in the request receipt, and cancels the request if necessary.
 
     Use this method to inform the downloader that you no longer require the request to be completed. If no other
-    handlers are registered for the request, and the request is currently not executing, the request will be canceled.
+    handlers are registered for the request, and the request is currently not executing, the request will be cancelled.
 
-    - parameter requestConatiner: The request container to cancel
+    - parameter requestReceipt: The request receipt to cancel
     */
-    public func cancelRequestForRequestContainer(requestContainer: RequestContainer) {
+    public func cancelRequestForRequestReceipt(requestReceipt: RequestReceipt) {
         dispatch_sync(self.synchronizationQueue) { () -> Void in
-            let identifier = ImageDownloader.identifierForURLRequest(requestContainer.request.request!)
+            let identifier = ImageDownloader.identifierForURLRequest(requestReceipt.request.request!)
 
             guard let responseHandler = self.responseHandlers[identifier] else {
                 return
             }
 
-            if let index = responseHandler.handlers.indexOf ({$0.uuid == requestContainer.uuid}) {
+            if let index = responseHandler.handlers.indexOf ({$0.uuid == requestReceipt.uuid}) {
                 responseHandler.handlers.removeAtIndex(index)
             }
 
-            if responseHandler.handlers.count == 0 && requestContainer.request.task.state != .Running {
-                requestContainer.request.task.cancel()
+            if responseHandler.handlers.count == 0 && requestReceipt.request.task.state != .Running {
+                requestReceipt.request.task.cancel()
             }
         }
     }
