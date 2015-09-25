@@ -187,8 +187,8 @@ class ImageDownloaderTestCase: BaseTestCase {
         }
 
         let activeRequestCount = downloader.activeRequestCount
-        request1?.cancel()
-        request2?.cancel()
+        request1?.request.cancel()
+        request2?.request.cancel()
 
         // Then
         XCTAssertEqual(activeRequestCount, 1, "active request count should be 1")
@@ -332,7 +332,7 @@ class ImageDownloaderTestCase: BaseTestCase {
         waitForExpectationsWithTimeout(timeout, handler: nil)
 
         // Then
-        XCTAssertEqual(request1?.task, request2?.task, "request 1 and 2 should be equal")
+        XCTAssertEqual(request1?.request.task, request2?.request.task, "request 1 and 2 should be equal")
 
         XCTAssertNotNil(result1, "result 1 should not be nil")
         XCTAssertNotNil(result2, "result 2 should not be nil")
@@ -379,7 +379,7 @@ class ImageDownloaderTestCase: BaseTestCase {
         waitForExpectationsWithTimeout(timeout, handler: nil)
 
         // Then
-        XCTAssertEqual(request1?.task, request2?.task, "request 1 and 2 should be equal")
+        XCTAssertEqual(request1?.request.task, request2?.request.task, "request 1 and 2 should be equal")
 
         XCTAssertNotNil(result1, "result 1 should not be nil")
         XCTAssertNotNil(result2, "result 2 should not be nil")
@@ -405,8 +405,8 @@ class ImageDownloaderTestCase: BaseTestCase {
             // No-op
         }
 
-        let credential = request?.delegate.credential
-        request?.cancel()
+        let credential = request?.request.delegate.credential
+        request?.request.cancel()
 
         // Then
         XCTAssertNil(credential, "credential should be nil")
@@ -424,8 +424,8 @@ class ImageDownloaderTestCase: BaseTestCase {
             // No-op
         }
 
-        let credential = request?.delegate.credential
-        request?.cancel()
+        let credential = request?.request.delegate.credential
+        request?.request.cancel()
 
         // Then
         XCTAssertNotNil(credential, "credential should not be nil")
@@ -444,8 +444,8 @@ class ImageDownloaderTestCase: BaseTestCase {
             // No-op
         }
 
-        let requestCredential = request?.delegate.credential
-        request?.cancel()
+        let requestCredential = request?.request.delegate.credential
+        request?.request.cancel()
 
         // Then
         XCTAssertNotNil(requestCredential, "request credential should not be nil")

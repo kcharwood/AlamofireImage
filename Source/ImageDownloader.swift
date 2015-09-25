@@ -29,6 +29,16 @@ import UIKit
 import Cocoa
 #endif
 
+
+public class RequestContainer {
+    let request: Request
+    let uuid: NSUUID
+    required public init(request: Request, uuid: NSUUID) {
+        self.request = request
+        self.uuid = uuid
+    }
+}
+
 /// The `ImageDownloader` class is responsible for downloading images in parallel on a prioritized queue. Incoming
 /// downloads are added to the front or back of the queue depending on the download prioritization. Each downloaded 
 /// image is cached in the underlying `NSURLCache` as well as the in-memory image cache that supports image filters. 
@@ -52,14 +62,12 @@ public class ImageDownloader {
     class ResponseHandler {
         let identifier: String
         let request: Request
-        var filters: [ImageFilter?]
-        var completionHandlers: [CompletionHandler?]
+        var handlers: [(uuid: NSUUID, filter: ImageFilter?, completion: CompletionHandler?)]
 
-        init(request: Request, filter: ImageFilter?, completion: CompletionHandler?) {
+        init(request: Request, uuid: NSUUID, filter: ImageFilter?, completion: CompletionHandler?) {
             self.request = request
             self.identifier = ImageDownloader.identifierForURLRequest(request.request!)
-            self.filters = [filter]
-            self.completionHandlers = [completion]
+            self.handlers = [(uuid: uuid, filter: filter, completion: completion)]
         }
     }
 
@@ -207,7 +215,7 @@ public class ImageDownloader {
         - returns: The created download request if available. `nil` if the image is stored in the image cache and the
                   URL request cache policy allows the cache to be used.
     */
-    public func downloadImage(URLRequest URLRequest: URLRequestConvertible, completion: CompletionHandler?) -> Request? {
+    public func downloadImage(URLRequest URLRequest: URLRequestConvertible, completion: CompletionHandler?) -> RequestContainer? {
         return downloadImage(URLRequest: URLRequest, filter: nil, completion: completion)
     }
 
@@ -219,31 +227,34 @@ public class ImageDownloader {
         handlers attached to the request are executed in the order they were added. Additionally, any filters attached
         to the request with the same identifiers are only executed once. The resulting image is then passed into each
         completion handler paired with the filter.
+    
+        Note that you should not attempt to modify any of the request properties from the returned request container directly,
+        as other callers may also be relying on that request to complete. If you no longer need the request, call 
+        `cancelRequestForRequestContainer` with the request container returned here.
 
         - parameter URLRequest: The URL request.
         - parameter filter      The image filter to apply to the image after the download is complete.
         - parameter completion: The closure called when the download request is complete.
 
-        - returns: The created download request if available. `nil` if the image is stored in the image cache and the
-                   URL request cache policy allows the cache to be used.
+        - returns: The created request container containing the download request if available. `nil` if the image is
+                   stored in the image cache and the URL request cache policy allows the cache to be used.
     */
     public func downloadImage(
         URLRequest URLRequest: URLRequestConvertible,
         filter: ImageFilter?,
         completion: CompletionHandler?)
-        -> Request?
+        -> RequestContainer?
     {
         var request: Request!
+        let callerUUID = NSUUID()
 
         dispatch_sync(synchronizationQueue) {
             // 1) Append the filter and completion handler to a pre-existing request if it already exists
             let identifier = ImageDownloader.identifierForURLRequest(URLRequest)
 
             if let responseHandler = self.responseHandlers[identifier] {
-                responseHandler.filters.append(filter)
-                responseHandler.completionHandlers.append(completion)
+                responseHandler.handlers.append(uuid: callerUUID, filter: filter, completion: completion)
                 request = responseHandler.request
-
                 return
             }
 
@@ -284,7 +295,7 @@ public class ImageDownloader {
                     case .Success(let image):
                         var filteredImages: [String: Image] = [:]
 
-                        for (filter, completion) in zip(responseHandler.filters, responseHandler.completionHandlers) {
+                        for (_, filter, completion) in responseHandler.handlers {
                             var filteredImage: Image
 
                             if let filter = filter {
@@ -309,7 +320,7 @@ public class ImageDownloader {
                             }
                         }
                     case .Failure:
-                        for completion in responseHandler.completionHandlers {
+                        for (_,_,completion) in responseHandler.handlers {
                             dispatch_async(dispatch_get_main_queue()) {
                                 completion?(request, response, result)
                             }
@@ -322,7 +333,7 @@ public class ImageDownloader {
             )
 
             // 4) Store the response handler for use when the request completes
-            let responseHandler = ResponseHandler(request: request, filter: filter, completion: completion)
+            let responseHandler = ResponseHandler(request: request, uuid: callerUUID, filter: filter, completion: completion)
             self.responseHandlers[identifier] = responseHandler
 
             // 5) Either start the request or enqueue it depending on the current active request count
@@ -333,7 +344,33 @@ public class ImageDownloader {
             }
         }
 
-        return request
+        return RequestContainer(request: request, uuid: callerUUID)
+    }
+
+    /**
+    Removes the request container from the response handlers for the request, and cancels the request if necessary.
+
+    Use this method to inform the downloader that you no longer require the request to be completed. If no other
+    handlers are registered for the request, and the request is currently not executing, the request will be canceled.
+
+    - parameter requestConatiner: The request container to cancel
+    */
+    public func cancelRequestForRequestContainer(requestContainer: RequestContainer) {
+        dispatch_sync(self.synchronizationQueue) { () -> Void in
+            let identifier = ImageDownloader.identifierForURLRequest(requestContainer.request.request!)
+
+            guard let responseHandler = self.responseHandlers[identifier] else {
+                return
+            }
+
+            if let index = responseHandler.handlers.indexOf ({$0.uuid == requestContainer.uuid}) {
+                responseHandler.handlers.removeAtIndex(index)
+            }
+
+            if responseHandler.handlers.count == 0 && requestContainer.request.task.state != .Running {
+                requestContainer.request.task.cancel()
+            }
+        }
     }
 
     // MARK: - Internal - Thread-Safe Request Methods

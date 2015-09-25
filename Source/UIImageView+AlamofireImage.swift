@@ -117,9 +117,9 @@ extension UIImageView {
         }
     }
 
-    var af_activeRequest: Request? {
+    var af_activeRequest: RequestContainer? {
         get {
-            return objc_getAssociatedObject(self, &AssociatedKeys.ActiveRequestKey) as? Request
+            return objc_getAssociatedObject(self, &AssociatedKeys.ActiveRequestKey) as? RequestContainer
         }
         set(request) {
             objc_setAssociatedObject(self, &AssociatedKeys.ActiveRequestKey, request, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -352,7 +352,10 @@ extension UIImageView {
         Cancels the active download request, if one exists.
     */
     public func af_cancelImageRequest() {
-        af_activeRequest?.cancel()
+        let imageDownloader = UIImageView.af_sharedImageDownloader
+        if let activeRequest = self.af_activeRequest {
+            imageDownloader.cancelRequestForRequestContainer(activeRequest)
+        }
     }
 
     // MARK: - Private - URL Request Helper Methods
@@ -366,7 +369,7 @@ extension UIImageView {
 
     private func isURLRequestURLEqualToActiveRequestURL(URLRequest: URLRequestConvertible?) -> Bool {
         if let
-            currentRequest = af_activeRequest?.task.originalRequest
+            currentRequest = af_activeRequest?.request.task.originalRequest
             where currentRequest.URLString == URLRequest?.URLRequest.URLString
         {
             return true
